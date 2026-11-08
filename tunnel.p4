@@ -22,10 +22,13 @@ header ethernet_t {
     bit<16>   etherType;
 }
 
+
 header myTunnel_t {
-    bit<16> proto_id;   // what follows the tunnel header, like etherType (0x0800: IPv4)
-    bit<16> dst_id;     // which tunnel exit to deliver to: 1 = h1, 2 = h2, 3 = h3
+    bit<16> proto_id;
+    bit<16> dst_id;
+    bit<8>  hop_limit;
 }
+
 
 header ipv4_t {
     bit<4>    version;
@@ -111,9 +114,16 @@ control MyIngress(inout headers hdr,
         default_action = drop();
     }
 
+    
     action myTunnel_forward(egressSpec_t port) {
-        standard_metadata.egress_spec = port;
+        if (hdr.myTunnel.hop_limit == 0) {
+            mark_to_drop(standard_metadata);
+        } else {
+            hdr.myTunnel.hop_limit = hdr.myTunnel.hop_limit - 1;
+            standard_metadata.egress_spec = port;
+        }
     }
+
 
     table myTunnel_exact {
         key = { hdr.myTunnel.dst_id: exact; }

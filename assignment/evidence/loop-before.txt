@@ -1,0 +1,93 @@
+
+C1 — Tunnel Loop Before Hop Limit
+Student ID suffix: 4965
+
+1. Display tunnel forwarding table on s2
+Command:
+sh ./p4cli s2 table_dump MyIngress.myTunnel_exact
+
+Relevant entry:
+Dumping entry 0x2
+myTunnel.dst_id : EXACT 0003
+Action entry: MyIngress.myTunnel_forward - 03
+
+2. Modify tunnel exit 3 to forward back to s1
+Command:
+sh ./p4cli s2 "table_modify MyIngress.myTunnel_exact MyIngress.myTunnel_forward 2 1"
+
+Output:
+Done
+Modifying entry 2 for exact match table MyIngress.myTunnel_exact
+
+3. Send tunnel packet
+Command:
+h1 python3 send.py 10.65.0.3 "loop" --tunnel 3
+
+Packet details:
+Ethernet type: 0x1212
+Tunnel destination ID: 3
+IPv4 source: 10.65.0.1
+IPv4 destination: 10.65.0.3
+Initial IPv4 TTL: 64
+Payload: loop
+Sent from h1-eth0.
+
+4. First switch packet counts
+Command:
+sh grep -c "Processing packet received" logs/s1.txt logs/s2.txt
+
+Output:
+logs/s1.txt:821
+logs/s2.txt:820
+
+5. Second switch packet counts
+Command:
+sh sleep 5; grep -c "Processing packet received" logs/s1.txt logs/s2.txt
+
+Output:
+logs/s1.txt:191
+logs/s2.txt:188
+
+Observation:
+The tunnel forwarding entry was changed so that s1 and s2
+forward tunnel destination 3 toward each other.
+
+The switch logs contained hundreds of packet-processing
+entries. The second counts were lower than the first,
+possibly because the logs were truncated or rotated.
+
+These counts are snapshots of log contents, not reliable
+cumulative packet counts. The original tunnel forwarding
+action does not decrement IPv4 TTL or enforce a hop limit.
+
+### Additional C1 Experiment — Original Tunnel Loop
+
+I repeated the forwarding-loop experiment with both switches running the original P4 program (`tunnel_v1.p4`).
+
+I modified the tunnel destination 3 entry on s2 to forward through port 1:
+
+`sh ./p4cli s2 "table_modify MyIngress.myTunnel_exact MyIngress.myTunnel_forward 2 1"`
+
+I recorded the packet-processing counts before sending the packet.
+
+**Before sending:**
+- s1: 401
+- s2: 396
+
+I then sent:
+
+`h1 python3 send.py 10.65.0.3 "original loop" --tunnel 3`
+
+**Immediately after sending:**
+- s1: 1,052
+- s2: 1,048
+
+**Two seconds later:**
+- s1: 707
+- s2: 702
+
+The packet-processing activity increased substantially immediately after the loop packet was sent. This supports the observation that the two switches repeatedly forwarded traffic between each other.
+
+The later counts decreased, possibly due to log truncation or rotation. Therefore, these numbers represent snapshots of the log contents rather than reliable cumulative packet counts.
+
+The original tunnel forwarding action does not enforce a hop limit, so it provides no mechanism to terminate the forwarding loop based on the number of traversals.

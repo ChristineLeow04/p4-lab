@@ -1,0 +1,92 @@
+
+C4 — Tunnel Loop After Hop-Limit Implementation
+Student ID suffix: 4965
+
+Network:
+python3 topo.py --id 4965
+
+1. Tunnel forwarding entry
+Command:
+sh ./p4cli s2 table_dump MyIngress.myTunnel_exact
+
+Relevant entry:
+Dumping entry 0x2
+myTunnel.dst_id : EXACT 0003
+Action entry: MyIngress.myTunnel_forward - 03
+
+2. Modify tunnel exit 3 to forward back to s1
+Command:
+sh ./p4cli s2 "table_modify MyIngress.myTunnel_exact MyIngress.myTunnel_forward 2 1"
+
+Output:
+Done
+Modifying entry 2 for exact match table MyIngress.myTunnel_exact
+
+3. Send tunnel packet with hop limit 4
+Command:
+h1 python3 send.py 10.65.0.3 "limited loop" --tunnel 3 --hops 4
+
+Packet:
+Tunnel destination ID: 3
+Initial hop limit: 4
+IPv4 source: 10.65.0.1
+IPv4 destination: 10.65.0.3
+IPv4 TTL: 64
+Payload: limited loop
+
+4. First switch packet counts
+Command:
+sh grep -c "Processing packet received" logs/s1.txt logs/s2.txt
+
+Output:
+logs/s1.txt:394
+logs/s2.txt:390
+
+5. Second switch packet counts
+Command:
+sh sleep 5; grep -c "Processing packet received" logs/s1.txt logs/s2.txt
+
+Output:
+logs/s1.txt:394
+logs/s2.txt:390
+
+Observation:
+After adding the tunnel hop limit, both switch log counts
+remained unchanged over five seconds.
+
+This indicates that the packet did not continue circulating
+indefinitely.
+
+With an initial hop limit of 4, the design allows four
+forwarding actions. The next switch should drop the packet
+when the hop limit is zero.
+
+The totals in the log files include other traffic, so they
+do not independently establish the exact packet pass count.
+39105-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Looking up key:
+39106-* hdr.myTunnel.dst_id : 0003
+39107-
+39108-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Table 'MyIngress.myTunnel_exact': hit with handle 2
+39109-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Dumping entry 2
+39110-Match key:
+39111-* hdr.myTunnel.dst_id : EXACT     0003
+39112-Action entry: MyIngress.myTunnel_forward - 2,
+39113-
+39114-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Action entry is MyIngress.myTunnel_forward - 2,
+39115-[03:42:35.660] [bmv2] [T] [thread 47665] [2.0] [cxt 0] Action MyIngress.myTunnel_forward
+39116-[03:42:35.660] [bmv2] [T] [thread 47665] [2.0] [cxt 0] tunnel.p4(119) Primitive if
+39117:[03:42:35.660] [bmv2] [T] [thread 47665] [2.0] [cxt 0] tunnel.p4(120) Primitive mark_to_drop(standard_metadata)
+39118-[03:42:35.660] [bmv2] [T] [thread 47665] [2.0] [cxt 0] tunnel.p4(119) Primitive if
+39119-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Pipeline 'ingress': end
+39120-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Egress port is 511
+39121-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Dropping packet at the end of ingress
+
+### Additional C4 Verification — Hop-Limit Drop
+
+I repeated the tunnel-loop experiment using the updated P4 program and sent a packet with an initial hop limit of 4.
+
+The s1 switch log showed that the packet matched tunnel destination ID 3 in `MyIngress.myTunnel_exact` and executed `MyIngress.myTunnel_forward`.
+
+The action then called `mark_to_drop(standard_metadata)`, and the packet was dropped at the end of ingress.
+
+This provides stronger evidence that the updated forwarding action terminates the loop when the tunnel hop limit is exhausted.

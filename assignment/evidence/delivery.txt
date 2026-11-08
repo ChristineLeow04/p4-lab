@@ -1,0 +1,35 @@
+
+C4 — Hop-Limit Delivery Evidence
+Student ID suffix: 4965
+
+Network:
+python3 topo.py --id 4965
+
+Test 1 — Tunnelled packet to h2
+Command:
+h1 python3 send.py 10.65.0.3 "delivery h2" --tunnel 2 --hops 4
+
+Receiver output (logs/h2.txt):
+Received (tunnelled, dst_id=2, hop_limit=2) from 10.65.0.1 to 10.65.0.3, TTL 64: 'delivery h2'
+
+Test 2 — Tunnelled packet to h3
+Command:
+h1 python3 send.py 10.65.0.3 "delivery h3" --tunnel 3 --hops 4
+
+Receiver output (logs/h3.txt):
+Received (tunnelled, dst_id=3, hop_limit=2) from 10.65.0.1 to 10.65.0.3, TTL 64: 'delivery h3'
+
+Test 3 — Plain IPv4 connectivity
+Command:
+h1 /bin/ping -c 2 10.65.0.3
+
+Result:
+2 packets transmitted, 2 received, 0% packet loss
+Both replies had TTL 62.
+
+Observation:
+Both tunnelled packets arrived at their intended tunnel exits.
+The starting hop limit was 4 and the received value was 2,
+showing that each P4 switch decremented the field once.
+
+Plain IPv4 forwarding still worked after the modification.

@@ -1,0 +1,65 @@
+
+C4 — Tunnel Loop After Hop-Limit Implementation
+Student ID suffix: 4965
+
+Network:
+python3 topo.py --id 4965
+
+1. Tunnel forwarding entry
+Command:
+sh ./p4cli s2 table_dump MyIngress.myTunnel_exact
+
+Relevant entry:
+Dumping entry 0x2
+myTunnel.dst_id : EXACT 0003
+Action entry: MyIngress.myTunnel_forward - 03
+
+2. Modify tunnel exit 3 to forward back to s1
+Command:
+sh ./p4cli s2 "table_modify MyIngress.myTunnel_exact MyIngress.myTunnel_forward 2 1"
+
+Output:
+Done
+Modifying entry 2 for exact match table MyIngress.myTunnel_exact
+
+3. Send tunnel packet with hop limit 4
+Command:
+h1 python3 send.py 10.65.0.3 "limited loop" --tunnel 3 --hops 4
+
+Packet:
+Tunnel destination ID: 3
+Initial hop limit: 4
+IPv4 source: 10.65.0.1
+IPv4 destination: 10.65.0.3
+IPv4 TTL: 64
+Payload: limited loop
+
+4. First switch packet counts
+Command:
+sh grep -c "Processing packet received" logs/s1.txt logs/s2.txt
+
+Output:
+logs/s1.txt:394
+logs/s2.txt:390
+
+5. Second switch packet counts
+Command:
+sh sleep 5; grep -c "Processing packet received" logs/s1.txt logs/s2.txt
+
+Output:
+logs/s1.txt:394
+logs/s2.txt:390
+
+Observation:
+After adding the tunnel hop limit, both switch log counts
+remained unchanged over five seconds.
+
+This indicates that the packet did not continue circulating
+indefinitely.
+
+With an initial hop limit of 4, the design allows four
+forwarding actions. The next switch should drop the packet
+when the hop limit is zero.
+
+The totals in the log files include other traffic, so they
+do not independently establish the exact packet pass count.

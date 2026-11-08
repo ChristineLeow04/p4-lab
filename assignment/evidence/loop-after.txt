@@ -63,3 +63,30 @@ when the hop limit is zero.
 
 The totals in the log files include other traffic, so they
 do not independently establish the exact packet pass count.
+39105-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Looking up key:
+39106-* hdr.myTunnel.dst_id : 0003
+39107-
+39108-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Table 'MyIngress.myTunnel_exact': hit with handle 2
+39109-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Dumping entry 2
+39110-Match key:
+39111-* hdr.myTunnel.dst_id : EXACT     0003
+39112-Action entry: MyIngress.myTunnel_forward - 2,
+39113-
+39114-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Action entry is MyIngress.myTunnel_forward - 2,
+39115-[03:42:35.660] [bmv2] [T] [thread 47665] [2.0] [cxt 0] Action MyIngress.myTunnel_forward
+39116-[03:42:35.660] [bmv2] [T] [thread 47665] [2.0] [cxt 0] tunnel.p4(119) Primitive if
+39117:[03:42:35.660] [bmv2] [T] [thread 47665] [2.0] [cxt 0] tunnel.p4(120) Primitive mark_to_drop(standard_metadata)
+39118-[03:42:35.660] [bmv2] [T] [thread 47665] [2.0] [cxt 0] tunnel.p4(119) Primitive if
+39119-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Pipeline 'ingress': end
+39120-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Egress port is 511
+39121-[03:42:35.660] [bmv2] [D] [thread 47665] [2.0] [cxt 0] Dropping packet at the end of ingress
+
+### Additional C4 Verification — Hop-Limit Drop
+
+I repeated the tunnel-loop experiment using the updated P4 program and sent a packet with an initial hop limit of 4.
+
+The s1 switch log showed that the packet matched tunnel destination ID 3 in `MyIngress.myTunnel_exact` and executed `MyIngress.myTunnel_forward`.
+
+The action then called `mark_to_drop(standard_metadata)`, and the packet was dropped at the end of ingress.
+
+This provides stronger evidence that the updated forwarding action terminates the loop when the tunnel hop limit is exhausted.

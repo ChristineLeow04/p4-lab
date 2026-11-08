@@ -59,3 +59,35 @@ possibly because the logs were truncated or rotated.
 These counts are snapshots of log contents, not reliable
 cumulative packet counts. The original tunnel forwarding
 action does not decrement IPv4 TTL or enforce a hop limit.
+
+### Additional C1 Experiment — Original Tunnel Loop
+
+I repeated the forwarding-loop experiment with both switches running the original P4 program (`tunnel_v1.p4`).
+
+I modified the tunnel destination 3 entry on s2 to forward through port 1:
+
+`sh ./p4cli s2 "table_modify MyIngress.myTunnel_exact MyIngress.myTunnel_forward 2 1"`
+
+I recorded the packet-processing counts before sending the packet.
+
+**Before sending:**
+- s1: 401
+- s2: 396
+
+I then sent:
+
+`h1 python3 send.py 10.65.0.3 "original loop" --tunnel 3`
+
+**Immediately after sending:**
+- s1: 1,052
+- s2: 1,048
+
+**Two seconds later:**
+- s1: 707
+- s2: 702
+
+The packet-processing activity increased substantially immediately after the loop packet was sent. This supports the observation that the two switches repeatedly forwarded traffic between each other.
+
+The later counts decreased, possibly due to log truncation or rotation. Therefore, these numbers represent snapshots of the log contents rather than reliable cumulative packet counts.
+
+The original tunnel forwarding action does not enforce a hop limit, so it provides no mechanism to terminate the forwarding loop based on the number of traversals.

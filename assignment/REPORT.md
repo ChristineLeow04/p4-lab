@@ -16,7 +16,11 @@ After that, I sent a tunnelled packet from h1 using:
 
 Normally, s1 forwards tunnel destination 3 towards s2, while s2 forwards it towards h3. After modifying s2's table, both switches forwarded the packet towards each other, creating a forwarding loop.
 
-In `evidence/loop-before.txt`, my first switch-log measurements were 821 packets for s1 and 820 for s2. Five seconds later, the recorded counts were 191 for s1 and 188 for s2. The logs showed substantial packet-processing activity, but the counts decreased instead of increasing. This could be caused by log truncation or other logging behavior, so these two measurements should not be treated as reliable cumulative packet counts.
+In `evidence/loop-before.txt`, my first experiment recorded switch-log counts of 821 for s1 and 820 for s2. Five seconds later, the counts were 191 and 188. Since these values decreased, I repeated the experiment with both switches running the original P4 program to collect stronger evidence.
+
+In the repeated experiment, the baseline counts were 401 for s1 and 396 for s2. Immediately after sending the loop packet, the counts increased to 1,052 and 1,048. Two seconds later, the counts were 707 and 702. This showed substantial packet-processing activity after the loop was created.
+
+The later decrease may have been caused by log truncation or rotation, so these measurements should be treated as snapshots rather than cumulative packet counts. However, the increase immediately after sending the packet provides stronger evidence of repeated forwarding between the switches.
 
 The original tunnel forwarding action did not reduce the IPv4 TTL or enforce any tunnel hop limit. Therefore, a tunnelled packet could continue circulating without an explicit termination mechanism.
 
@@ -126,6 +130,8 @@ According to my design, a packet starting with a hop limit of 4 can be forwarded
 
 The expected result is therefore four successful forwards followed by a drop on the fifth switch visit. The aggregate log counts support loop termination but do not independently prove the exact number of traversals.
 
+I repeated the experiment to verify the drop behavior directly. The detailed s1 switch log showed a successful match for tunnel destination ID 3, execution of `MyIngress.myTunnel_forward`, and a call to `mark_to_drop(standard_metadata)`. The packet was then dropped at the end of ingress. This confirms that the forwarding action's hop-limit protection was activated during the loop experiment. The additional evidence is included in `evidence/loop-after.txt`.
+
 The results are recorded in `evidence/loop-after.txt`.
 
 ## 5. Evaluation
@@ -150,7 +156,11 @@ The result shows that s1 decreased the hop limit once, while s2 did not decrease
 
 Because the new field was appended after the original four-byte header, the older switch did not understand it as a hop-limit field. The successful receiver output showed that the byte remained available to the updated receiver in this experiment, although this does not guarantee general compatibility between different header versions.
 
-I also attempted to capture the packet using `tcpdump`, but both capture attempts reported zero packets. Therefore, I could not confirm the exact bytes through a successful hexadecimal capture. The receiver logs provide evidence of packet delivery, but I do not claim that the packet capture succeeded.
+My initial tcpdump attempts on h2's interface captured zero packets, so I repeated the capture on the s1-to-s2 connection using interface `s1-eth2`. This time, tcpdump successfully captured one tunnelled packet.
+
+The hexadecimal output showed the bytes `08 00 00 02 03 45 00` immediately after the Ethernet header. The first two bytes represented the IPv4 protocol ID, the next two bytes represented tunnel destination 2, and the following byte (`03`) represented the remaining hop limit. The bytes `45 00` marked the beginning of the IPv4 header.
+
+This confirmed that s1 forwarded the updated 5-byte tunnel header with a remaining hop limit of 3. The successful capture, together with the earlier receiver output, supported my observation that the old s2 could forward this packet without decrementing the hop limit. However, the old switch did not provide full hop-limit protection, so this mixed-version behavior would not be sufficient as a general compatibility guarantee.
 
 Next, I modified s2's tunnel destination 3 entry to output port 1, creating the same loop as before.
 
@@ -223,7 +233,7 @@ I reviewed the suggested explanations and remain responsible for understanding, 
 
 | File | What it shows |
 |---|---|
-| `evidence/loop-before.txt` | Original tunnel loop configuration and initial switch-log measurements |
+| `evidence/loop-before.txt` | Original tunnel loop configuration, initial measurements and repeated experiment showing increased packet-processing activity |
 | `evidence/delivery.txt` | Successful tunnelled delivery to h2 and h3, received hop-limit values and ordinary IPv4 ping |
 | `evidence/loop-after.txt` | Forwarding-loop experiment with hop-limit protection and stable log counts |
 | `evidence/mixed.txt` | Mixed-version delivery, unsuccessful packet-capture attempts and loop termination evidence |

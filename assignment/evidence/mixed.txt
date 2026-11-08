@@ -74,3 +74,40 @@ switches used the updated program.
 
 The counts include other switch activity and do not
 independently establish the exact number of traversals.
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on s1-eth2, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+03:49:55.948677 00:00:00:00:00:01 > ff:ff:ff:ff:ff:ff, ethertype Unknown (0x1212), length 59: 
+	0x0000:  ffff ffff ffff 0000 0000 0001 1212 0800  ................
+	0x0010:  0002 0345 0000 2800 0100 0040 1166 3f0a  ...E..(....@.f?.
+	0x0020:  4100 010a 4100 0310 e110 e100 1433 3c63  A...A........3<c
+	0x0030:  6170 7475 7265 2074 6573 74              apture.test
+1 packet captured
+1 packet received by filter
+0 packets dropped by kernel
+
+### Additional C5 Verification — Successful Hexadecimal Capture
+
+I repeated the packet capture on the link between s1 and s2 using interface `s1-eth2`.
+
+Command:
+
+`sh timeout 15 tcpdump -U -c 1 -XX -ni s1-eth2 'ether proto 0x1212' > logs/mixed-capture.txt 2>&1 &`
+
+After allowing tcpdump to start, I sent:
+
+`h1 python3 send.py 10.65.0.3 "capture test" --tunnel 2 --hops 4`
+
+The capture successfully recorded one packet with Ethernet type `0x1212`.
+
+The hexadecimal bytes immediately after the Ethernet header were `08 00 00 02 03 45 00`.
+
+These represent:
+
+- `08 00`: Tunnel protocol ID indicating IPv4.
+- `00 02`: Tunnel destination ID 2.
+- `03`: Remaining hop limit after s1 decremented the initial value of 4.
+- `45 00`: Beginning of the IPv4 header.
+
+The capture confirms that s1 transmitted the updated 5-byte tunnel header toward s2. The earlier receiver test also showed that h2 received a tunnelled packet with hop limit 3.
+
+The original tcpdump attempts at h2 captured zero packets, but capturing on the s1-to-s2 link was successful.
